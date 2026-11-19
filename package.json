@@ -1,17 +1,18 @@
 {
-  "name": "internship-board-api",
+  "name": "internship-board-integrated",
   "version": "1.0.0",
-  "description": "RESTful backend API for an Internship Board using Node.js, Express, and SQLite with parameterized queries",
+  "description": "Secure Full-Stack Internship Board & Application API with SQLite persistence, validation, security protections, and automated integration tests",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "seed": "node seed.js",
-    "test": "node --test test/api.test.js"
+    "test": "node --test tests/integration.test.js test/api.test.js",
+    "test:integration": "node --test tests/integration.test.js"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rajasaravananbalamurugan/internship-board-api.git"
+    "url": "git+https://github.com/rajasaravananbalamurugan/internship-board-integrated.git"
   },
   "keywords": [
     "nodejs",
@@ -28,6 +29,8 @@
     "cors": "^2.8.6",
     "dotenv": "^18.0.10",
     "express": "^5.3.0",
+    "express-rate-limit": "^8.7.5",
+    "helmet": "^8.3.0",
     "sqlite3": "^6.0.1"
   }
 }

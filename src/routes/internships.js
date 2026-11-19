@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getDatabase } = require('../db/database');
+const { getDatabase } = require('../db');
 const { validateInternship } = require('../middleware/validate');
 
 /**

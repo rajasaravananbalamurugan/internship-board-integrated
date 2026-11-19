@@ -1,80 +1,74 @@
-# InternHub — RESTful Backend API & Internship Board
+# InternHub — Full-Stack Internship Board & Application API
 
-A production-ready RESTful backend API for an Internship Board built with **Node.js**, **Express**, and **SQLite** (using `better-sqlite3` with strict parameterized queries). It also serves the companion accessible, responsive frontend web client.
+A production-ready full-stack web application and RESTful backend API for an **Internship Board** with an **internship application submission workflow**, persistent SQLite storage (`better-sqlite3`), strict server-side security safeguards, accessible responsive UI, and automated integration test coverage.
 
 ---
 
 ## 📑 Table of Contents
 
 - [Features](#-features)
-- [Project Architecture](#-project-architecture)
+- [Project Structure](#-project-structure)
 - [Database Schema & Seed Data](#-database-schema--seed-data)
+- [Security Architecture](#-security-architecture)
 - [Getting Started](#-getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
-  - [Environment Configuration](#environment-configuration)
+  - [Environment Setup](#environment-setup)
   - [Database Seeding](#database-seeding)
   - [Running the Server](#running-the-server)
-  - [Running Automated Tests](#running-automated-tests)
-- [Consistent API Response Envelope](#-consistent-api-response-envelope)
+- [Automated Tests & Test Report](#-automated-tests--test-report)
+- [Frontend Client & Application Workflow](#-frontend-client--application-workflow)
 - [API Reference](#-api-reference)
-  - [Health Check](#1-health-check)
-  - [List Internships](#2-list-internships-with-filtering--pagination)
-  - [Get Internship by ID](#3-get-internship-by-id)
-  - [Create Internship](#4-create-internship)
-  - [Full Update Internship (PUT)](#5-full-update-internship-put)
-  - [Partial Update Internship (PATCH)](#6-partial-update-internship-patch)
-  - [Delete Internship](#7-delete-internship)
-  - [Filter Metadata](#8-filter-metadata)
-- [Frontend Client Integration](#-frontend-client-integration)
-- [Validation & Error Handling](#-validation--error-handling)
+  - [Internships Endpoints](#internships-endpoints)
+  - [Applications Endpoints](#applications-endpoints)
+  - [Health Check](#health-check)
 - [License](#-license)
 
 ---
 
 ## ✨ Features
 
-- **Robust REST API Architecture**: Clean separation of concerns with modular routes, database access, validation, and error-handling middleware.
-- **SQLite with Parameterized Queries**: High-performance SQLite engine via `better-sqlite3`, WAL mode enabled, zero SQL injection risk using parameterized prepared statements.
-- **Predictable API Envelopes**: Uniform JSON envelope structure across list endpoints, single-resource endpoints, and error responses.
-- **Idempotent Database Seeding**: Safe script (`npm run seed`) populating the exact 5 specified seed records using SQLite `ON CONFLICT DO UPDATE`.
-- **Filtering, Search & Pagination**: Query by domain, mode, location, specific skill, free-text search across multiple fields, custom sorting, and flexible page/limit pagination.
-- **Strict Payload Validation**: Field validation for all mutations with structured error arrays.
-- **Automated Test Suite**: 20 comprehensive end-to-end tests using Node's native test runner (`node --test`).
-- **Integrated Full-Stack Experience**: Express statically serves the vanilla HTML5/CSS3 frontend, seamlessly connecting the UI to the backend.
+- **Responsive & Accessible Frontend**: Pure vanilla HTML5, CSS3, and JavaScript located in `public/`. Tested mobile-first down to **360px** with full keyboard navigation and focus traps in native `<dialog>` elements.
+- **Application Submission Workflow**: Applicants can view full internship details and submit applications with full name, email address, portfolio/GitHub URL, and cover note.
+- **SQLite with Parameterized Queries**: High-speed persistence using `better-sqlite3`, WAL mode, and 100% parameterized queries (`?` placeholders) ensuring zero SQL injection risk.
+- **Database-Level Deduplication**: Enforces a `UNIQUE(internship_id, applicant_email)` constraint preventing duplicate applications per position.
+- **Strict Server-Side Security**:
+  - `helmet` security headers (CSP, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`).
+  - Rate limiting via `express-rate-limit` on all API routes, with tighter limits on application submissions.
+  - URL scheme allowlisting: Rejects dangerous protocols (`javascript:`, `data:`, `file:`, `vbscript:`) and enforces valid `http:`/`https:` domains.
+  - PII-Safe Logging: Logs method, path, status, and duration only — never writes applicant PII or credentials.
+- **Consistent Response Envelopes**: Standardized `{ "status": "success", "data": ... }` and centralized error envelopes `{ "status": "error", "message": ..., "errors": [...] }`.
+- **Automated Integration Tests**: 32 automated tests using Node's native test runner (`node --test`), covering CRUD operations, application workflows, validation rejections, and security headers.
 
 ---
 
-## 🏗 Project Architecture
+## 🏗 Project Structure
 
 ```
-internship-board/
-├── data/
-│   └── internships.db       # SQLite database file (created on seed/start)
+internship-board-api/
+├── public/                  # Responsive, accessible frontend client
+│   ├── index.html           # Semantic markup, detail modal, and application form dialog
+│   ├── styles.css           # Mobile-first CSS, 360px-ready, accessible focus rings
+│   └── app.js               # API loading, filtering, form validation, modal focus trap
 ├── src/
-│   ├── app.js               # Express app factory (middleware, static files, routes)
-│   ├── db/
-│   │   └── database.js      # SQLite connection, pragmas (WAL), auto-schema runner
-│   ├── middleware/
-│   │   ├── errorHandler.js  # 404 and global JSON error envelope handler
-│   │   └── validate.js      # Payload validation for POST, PUT, and PATCH
-│   └── routes/
-│       ├── health.js        # Health check endpoint (/api/health)
-│       └── internships.js   # Full CRUD REST endpoints (/api/internships)
-├── test/
-│   └── api.test.js          # Automated end-to-end test suite
-├── .env.example             # Example environment variables
-├── .env                     # Local environment file
-├── .gitignore               # Git ignore rules for node_modules, DB, and logs
-├── app.js                   # Frontend client script (with API integration)
-├── index.html               # Frontend HTML5 UI
-├── internships.json         # Reference JSON seed records
-├── package.json             # NPM package definition and npm scripts
-├── README.md                # Project documentation
-├── schema.sql               # SQLite DDL schema and indexes
-├── seed.js                  # Idempotent database seeding script
-├── server.js                # Server entrypoint listening on PORT
-└── styles.css               # Frontend CSS styles
+│   ├── server.js            # Express app initialization and server entrypoint
+│   ├── db.js                # SQLite connection, pragmas (WAL), auto-schema runner
+│   ├── routes/
+│   │   ├── internships.js   # REST CRUD endpoints for internships (/api/internships)
+│   │   ├── applications.js  # Application submission workflow (/api/applications)
+│   │   └── health.js        # Health check endpoint (/api/health)
+│   └── middleware/
+│       ├── security.js      # Helmet headers, rate limiters, PII-safe request logger
+│       ├── validate.js      # Payload validators and URL scheme allowlisting
+│       └── errorHandler.js  # Centralized 404 and global JSON error envelope handler
+├── tests/
+│   └── integration.test.js  # End-to-end integration test suite
+├── schema.sql               # SQLite DDL schema with tables and indexes
+├── seed.js                  # Idempotent database population script
+├── server.js                # Root proxy entrypoint
+├── package.json             # NPM package definition, scripts, and dependencies
+├── SECURITY.md              # Security checklist and policy documentation
+└── README.md                # Project documentation
 ```
 
 ---
@@ -90,25 +84,52 @@ CREATE TABLE IF NOT EXISTS internships (
   domain TEXT NOT NULL,
   mode TEXT NOT NULL CHECK(mode IN ('Remote', 'Hybrid', 'On-site')),
   location TEXT NOT NULL,
-  skills TEXT NOT NULL, -- Stored as JSON array: e.g. '["HTML","CSS","JavaScript"]'
+  skills TEXT NOT NULL, -- Stored as JSON array: e.g. ["HTML","CSS","JavaScript"]
   openings INTEGER NOT NULL DEFAULT 1 CHECK(openings >= 0),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS applications (
+  id TEXT PRIMARY KEY,
+  internship_id TEXT NOT NULL,
+  applicant_name TEXT NOT NULL,
+  applicant_email TEXT NOT NULL,
+  portfolio_url TEXT NOT NULL,
+  cover_note TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (internship_id) REFERENCES internships(id) ON DELETE CASCADE,
+  CONSTRAINT uq_internship_applicant UNIQUE (internship_id, applicant_email)
+);
+
 CREATE INDEX IF NOT EXISTS idx_internships_domain ON internships(domain);
 CREATE INDEX IF NOT EXISTS idx_internships_mode ON internships(mode);
-CREATE INDEX IF NOT EXISTS idx_internships_location ON internships(location);
-CREATE INDEX IF NOT EXISTS idx_internships_created_at ON internships(created_at);
+CREATE INDEX IF NOT EXISTS idx_applications_internship_id ON applications(internship_id);
+CREATE INDEX IF NOT EXISTS idx_applications_email ON applications(applicant_email);
 ```
 
 ### Seed Data
-The database is pre-seeded with 5 initial records:
+The database is pre-seeded idempotently with the 5 sample records (`INT-101` through `INT-105`) matching the exact specification:
 - `INT-101`: Frontend Intern (Full Stack Development, Remote, India, `["HTML","CSS","JavaScript"]`, openings: 3)
 - `INT-102`: API Engineering Intern (Full Stack Development, Hybrid, Pune, `["Node.js","SQL","Testing"]`, openings: 2)
 - `INT-103`: UI/UX Intern (UI/UX, Remote, India, `["Figma","Research","Accessibility"]`, openings: 1)
 - `INT-104`: Data Analyst Intern (Data Analytics, On-site, Bengaluru, `["Excel","SQL","Data visualisation"]`, openings: 2)
 - `INT-105`: Security Operations Intern (Cyber Security, Remote, India, `["Linux","Logs","Networking"]`, openings: 1)
+
+---
+
+## 🛡 Security Architecture
+
+See [`SECURITY.md`](SECURITY.md) for full policy details. Implemented security safeguards include:
+
+1. **SQL Injection Prevention**: 100% prepared statements with parameterized inputs (`?`). No SQL concatenation is used anywhere in the codebase.
+2. **URL Scheme Allowlist**: Strict validation rejecting malicious pseudo-protocols like `javascript:alert(1)`, `data:`, `file:`, or `vbscript:`. Only valid `http://` and `https://` URLs are accepted.
+3. **Stored XSS Sanitization**: User input strings are trimmed and sanitized to strip dangerous tags and characters before storage.
+4. **Rate Limiting**:
+   - General API limiter: 200 requests / 15 minutes per IP.
+   - Application submission limiter: 15 submissions / 15 minutes per IP to curb spam.
+5. **Security Headers (Helmet)**: Sets `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy`.
+6. **PII-Safe Logging**: Safe logger records HTTP method, sanitized path, status code, and latency only. Applicant emails, names, cover notes, passwords, and authorization tokens are strictly omitted from logs.
 
 ---
 
@@ -120,23 +141,19 @@ The database is pre-seeded with 5 initial records:
 
 ### Installation
 
-Clone the repository and install dependencies:
-
 ```bash
-git clone https://github.com/rajasaravananbalamurugan/internship-board-api.git
-cd internship-board-api
+git clone https://github.com/rajasaravananbalamurugan/internship-board-integrated.git
+cd internship-board-integrated
 npm install
 ```
 
-### Environment Configuration
+### Environment Setup
 
 Copy `.env.example` to `.env`:
-
 ```bash
 cp .env.example .env
 ```
 
-Available environment variables:
 | Variable | Default Value | Description |
 |---|---|---|
 | `PORT` | `3000` | Port for the Express server to listen on |
@@ -145,60 +162,102 @@ Available environment variables:
 
 ### Database Seeding
 
-Run the idempotent seed script to create the table and populate initial data:
-
+Run the idempotent seed script:
 ```bash
 npm run seed
 ```
-
 Output:
 ```
-◇ injected env from .env
-✅ Seed complete! Seeded 5 records. Total records in database: 5.
+✅ Seed complete! Seeded 5 records. Total internships in database: 5.
 ```
-
-*(You can run this command multiple times without duplicating any records).*
 
 ### Running the Server
 
-#### Production / Standard Start:
+#### Production / Standard:
 ```bash
 npm start
 ```
 
-#### Development Mode (with native watch):
+#### Development Mode (with native file watching):
 ```bash
 npm run dev
 ```
 
-The server will start at:
-- Backend API: `http://localhost:3000/api/internships`
-- Frontend UI: `http://localhost:3000/`
+The application will be accessible at:
+- **Frontend UI**: [http://localhost:3000/](http://localhost:3000/)
+- **Backend API**: [http://localhost:3000/api/internships](http://localhost:3000/api/internships)
 
-### Running Automated Tests
+---
 
-Run the comprehensive test suite:
+## 🧪 Automated Tests & Test Report
 
+The project includes automated integration and unit tests using Node's built-in test runner (`node:test`).
+
+### Run All Tests:
 ```bash
 npm test
 ```
 
-Output:
+### Run Integration Tests Specifically:
+```bash
+npm run test:integration
 ```
-✔ Internship Board REST API Test Suite
-ℹ tests 20
-ℹ suites 9
-ℹ pass 20
+
+### Test Report Summary:
+```
+✔ Internship Board REST API Test Suite (20 tests)
+✔ Internship Board & Applications Integration Tests (12 tests)
+  - Verifies presence of Helmet security headers (CSP, X-Frame-Options, nosniff)
+  - 1. Successful listing and filtering of internships with pagination envelope
+  - 2. Successful application submission (201 Created)
+  - 3. Rejected missing or blank name (400 Bad Request)
+  - 4. Rejected invalid email format (400 Bad Request)
+  - 5. Rejected unsafe URL like javascript:alert(1) (400 Bad Request)
+  - 6. Rejected duplicate application for the same internship + email (409 Conflict)
+  - Allows same email to apply to a different internship
+  - Rejects application for non-existent internship_id (404 Not Found)
+
+ℹ tests 32
+ℹ suites 13
+ℹ pass 32
 ℹ fail 0
+ℹ duration_ms 673ms
 ```
 
 ---
 
-## 📦 Consistent API Response Envelope
+## 💻 Frontend Client & Application Workflow
 
-Every endpoint returns a predictable JSON envelope structure:
+The frontend is served directly by Express from `public/`:
+1. **Live API Fetching**: Loads internships via `fetch('/api/internships')`.
+2. **State Panels**: Displays accessible loading spinners, error alerts with a working **Retry** button, and empty filter panels with a **Reset filters** button.
+3. **Application Dialog (`<dialog id="apply-modal">`)**:
+   - Opens when clicking "Apply" on any card or from the "View Details" modal.
+   - Pre-fills the role title and ID.
+   - Associated `<label for="...">` elements on all input fields.
+   - Client-side validation for Full Name, Email, and Portfolio URL.
+   - Loading state on Submit button to prevent duplicate submissions.
+   - Inline server error feedback and clean success confirmation.
+   - Full keyboard navigation: Focus trapped inside `<dialog>`, `Escape` closes, and focus returns to trigger element.
+   - Zero horizontal overflow at **360px** mobile viewport width.
 
-### 1. List Response Envelope
+---
+
+## 📡 API Reference
+
+### Internships Endpoints
+
+#### `GET /api/internships`
+Returns a paginated list of internships.
+- **Query Parameters**:
+  - `page`: Page number (default `1`)
+  - `limit`: Items per page (default `10`, max `100`)
+  - `search`: Keyword search across title, domain, location, and skills
+  - `domain`: Filter by domain (`Full Stack Development`, `UI/UX`, `Data Analytics`, `Cyber Security`)
+  - `mode`: Filter by mode (`Remote`, `Hybrid`, `On-site`)
+  - `sort`: Sort field (`id`, `title`, `domain`, `mode`, `openings`, `created_at`)
+  - `order`: Sort direction (`asc`, `desc`)
+- **Response**: `200 OK`
 ```json
 {
   "status": "success",
@@ -210,9 +269,7 @@ Every endpoint returns a predictable JSON envelope structure:
       "mode": "Remote",
       "location": "India",
       "skills": ["HTML", "CSS", "JavaScript"],
-      "openings": 3,
-      "createdAt": "2026-11-20 00:00:00",
-      "updatedAt": "2026-11-20 00:00:00"
+      "openings": 3
     }
   ],
   "pagination": {
@@ -224,363 +281,77 @@ Every endpoint returns a predictable JSON envelope structure:
 }
 ```
 
-### 2. Single Resource / Mutation Envelope
+#### `GET /api/internships/:id`
+Returns a single internship by its string ID (e.g. `INT-101`). Returns `404` if not found.
+
+#### `POST /api/internships`
+Creates a new internship. Accepts `id` (optional), `title`, `domain`, `mode`, `location`, `skills` (array of strings), and `openings`.
+
+#### `PUT /api/internships/:id` & `PATCH /api/internships/:id`
+Full (`PUT`) or partial (`PATCH`) update of an internship record.
+
+#### `DELETE /api/internships/:id`
+Deletes an internship record.
+
+---
+
+### Applications Endpoints
+
+#### `POST /api/applications`
+Submits an application for an internship.
+- **Rate Limit**: Max 15 submissions per 15 minutes per IP.
+- **Request Body**:
+```json
+{
+  "internship_id": "INT-101",
+  "applicant_name": "Jane Doe",
+  "applicant_email": "jane.doe@example.com",
+  "portfolio_url": "https://github.com/janedoe",
+  "cover_note": "Experienced in semantic HTML, CSS Grid, and vanilla JavaScript."
+}
+```
+- **Response**: `201 Created`
 ```json
 {
   "status": "success",
   "data": {
-    "id": "INT-101",
-    "title": "Frontend Intern",
-    "domain": "Full Stack Development",
-    "mode": "Remote",
-    "location": "India",
-    "skills": ["HTML", "CSS", "JavaScript"],
-    "openings": 3
+    "id": "APP-1-ML7B1K",
+    "internship_id": "INT-101",
+    "applicant_name": "Jane Doe",
+    "applicant_email": "jane.doe@example.com",
+    "portfolio_url": "https://github.com/janedoe",
+    "cover_note": "Experienced in semantic HTML, CSS Grid, and vanilla JavaScript.",
+    "created_at": "2026-11-20 00:38:00"
   }
 }
 ```
+- **Error Responses**:
+  - `400 Bad Request`: Validation failure (missing name, invalid email, or unsafe URL scheme).
+  - `404 Not Found`: `internship_id` does not exist in database.
+  - `409 Conflict`: Applicant with this email has already applied to this internship.
 
-### 3. Error Envelope
-```json
-{
-  "status": "error",
-  "message": "Validation failed",
-  "errors": [
-    {
-      "field": "title",
-      "message": "Title is required and must be a non-empty string"
-    }
-  ]
-}
-```
+#### `GET /api/applications`
+Returns a list of submitted applications (supports `?internship_id=INT-101` query filter).
 
 ---
 
-## 📡 API Reference
+### Health Check
 
-### 1. Health Check
-Checks the server and uptime.
-
-- **Method**: `GET`
-- **URL**: `/api/health`
+#### `GET /api/health`
 - **Response**: `200 OK`
 ```json
 {
   "status": "success",
   "data": {
     "status": "healthy",
-    "uptime": 124,
-    "timestamp": "2026-11-20T00:15:00.000Z"
+    "uptime": 45,
+    "timestamp": "2026-11-20T00:38:00.000Z"
   }
 }
 ```
 
 ---
 
-### 2. List Internships (with Filtering & Pagination)
-Retrieve all internships matching optional filter, search, and pagination criteria.
-
-- **Method**: `GET`
-- **URL**: `/api/internships`
-- **Query Parameters**:
-  | Parameter | Type | Default | Description |
-  |---|---|---|---|
-  | `page` | integer | `1` | Page number (1-indexed) |
-  | `limit` | integer | `10` | Number of items per page (max `100`) |
-  | `search` | string | *none* | Case-insensitive search on title, domain, location, or skills |
-  | `domain` | string | *none* | Filter by domain (e.g. `Full Stack Development`) |
-  | `mode` | string | *none* | Filter by mode (`Remote`, `Hybrid`, `On-site`) |
-  | `location` | string | *none* | Partial or full match on location (e.g. `India`, `Pune`) |
-  | `skill` | string | *none* | Filter by required skill inside `skills` array (e.g. `SQL`) |
-  | `sort` | string | `id` | Sort field: `id`, `title`, `domain`, `mode`, `location`, `openings`, `created_at` |
-  | `order` | string | `asc` | Sort direction: `asc` or `desc` |
-
-- **Example Request**:
-  ```bash
-  curl "http://localhost:3000/api/internships?mode=Remote&page=1&limit=2"
-  ```
-
-- **Response**: `200 OK`
-  ```json
-  {
-    "status": "success",
-    "data": [
-      {
-        "id": "INT-101",
-        "title": "Frontend Intern",
-        "domain": "Full Stack Development",
-        "mode": "Remote",
-        "location": "India",
-        "skills": ["HTML", "CSS", "JavaScript"],
-        "openings": 3,
-        "createdAt": "2026-11-20 00:00:00",
-        "updatedAt": "2026-11-20 00:00:00"
-      },
-      {
-        "id": "INT-103",
-        "title": "UI/UX Intern",
-        "domain": "UI/UX",
-        "mode": "Remote",
-        "location": "India",
-        "skills": ["Figma", "Research", "Accessibility"],
-        "openings": 1,
-        "createdAt": "2026-11-20 00:00:00",
-        "updatedAt": "2026-11-20 00:00:00"
-      }
-    ],
-    "pagination": {
-      "page": 1,
-      "limit": 2,
-      "total": 3,
-      "totalPages": 2
-    }
-  }
-  ```
-
----
-
-### 3. Get Internship by ID
-Retrieve a single internship by its unique identifier.
-
-- **Method**: `GET`
-- **URL**: `/api/internships/:id`
-- **Example Request**:
-  ```bash
-  curl http://localhost:3000/api/internships/INT-102
-  ```
-- **Response**: `200 OK`
-  ```json
-  {
-    "status": "success",
-    "data": {
-      "id": "INT-102",
-      "title": "API Engineering Intern",
-      "domain": "Full Stack Development",
-      "mode": "Hybrid",
-      "location": "Pune",
-      "skills": ["Node.js", "SQL", "Testing"],
-      "openings": 2,
-      "createdAt": "2026-11-20 00:00:00",
-      "updatedAt": "2026-11-20 00:00:00"
-    }
-  }
-  ```
-- **Error (404)**:
-  ```json
-  {
-    "status": "error",
-    "message": "Internship with ID 'INT-999' not found"
-  }
-  ```
-
----
-
-### 4. Create Internship
-Add a new internship role. If `id` is omitted, the next sequential ID (e.g. `INT-106`) is automatically assigned.
-
-- **Method**: `POST`
-- **URL**: `/api/internships`
-- **Headers**: `Content-Type: application/json`
-- **Request Body**:
-  ```json
-  {
-    "title": "DevOps Engineer Intern",
-    "domain": "Cloud & Infrastructure",
-    "mode": "Remote",
-    "location": "India",
-    "skills": ["Docker", "Kubernetes", "Linux"],
-    "openings": 2
-  }
-  ```
-- **Example Request**:
-  ```bash
-  curl -X POST http://localhost:3000/api/internships \
-    -H "Content-Type: application/json" \
-    -d '{
-      "title": "DevOps Engineer Intern",
-      "domain": "Cloud & Infrastructure",
-      "mode": "Remote",
-      "location": "India",
-      "skills": ["Docker", "Kubernetes", "Linux"],
-      "openings": 2
-    }'
-  ```
-- **Response**: `201 Created`
-  ```json
-  {
-    "status": "success",
-    "data": {
-      "id": "INT-106",
-      "title": "DevOps Engineer Intern",
-      "domain": "Cloud & Infrastructure",
-      "mode": "Remote",
-      "location": "India",
-      "skills": ["Docker", "Kubernetes", "Linux"],
-      "openings": 2,
-      "createdAt": "2026-11-20 00:15:30",
-      "updatedAt": "2026-11-20 00:15:30"
-    }
-  }
-  ```
-
----
-
-### 5. Full Update Internship (PUT)
-Replaces all mutable fields for an existing internship.
-
-- **Method**: `PUT`
-- **URL**: `/api/internships/:id`
-- **Headers**: `Content-Type: application/json`
-- **Request Body**:
-  ```json
-  {
-    "title": "Senior Frontend Intern",
-    "domain": "Full Stack Development",
-    "mode": "Remote",
-    "location": "India",
-    "skills": ["React", "TypeScript", "Tailwind CSS"],
-    "openings": 4
-  }
-  ```
-- **Response**: `200 OK`
-  ```json
-  {
-    "status": "success",
-    "data": {
-      "id": "INT-101",
-      "title": "Senior Frontend Intern",
-      "domain": "Full Stack Development",
-      "mode": "Remote",
-      "location": "India",
-      "skills": ["React", "TypeScript", "Tailwind CSS"],
-      "openings": 4,
-      "createdAt": "2026-11-20 00:00:00",
-      "updatedAt": "2026-11-20 00:16:00"
-    }
-  }
-  ```
-
----
-
-### 6. Partial Update Internship (PATCH)
-Updates only the specified fields of an existing internship.
-
-- **Method**: `PATCH`
-- **URL**: `/api/internships/:id`
-- **Headers**: `Content-Type: application/json`
-- **Request Body**:
-  ```json
-  {
-    "openings": 5,
-    "mode": "Hybrid"
-  }
-  ```
-- **Response**: `200 OK`
-  ```json
-  {
-    "status": "success",
-    "data": {
-      "id": "INT-101",
-      "title": "Frontend Intern",
-      "domain": "Full Stack Development",
-      "mode": "Hybrid",
-      "location": "India",
-      "skills": ["HTML", "CSS", "JavaScript"],
-      "openings": 5,
-      "createdAt": "2026-11-20 00:00:00",
-      "updatedAt": "2026-11-20 00:16:45"
-    }
-  }
-  ```
-
----
-
-### 7. Delete Internship
-Permanently deletes an internship record by ID.
-
-- **Method**: `DELETE`
-- **URL**: `/api/internships/:id`
-- **Example Request**:
-  ```bash
-  curl -X DELETE http://localhost:3000/api/internships/INT-105
-  ```
-- **Response**: `200 OK`
-  ```json
-  {
-    "status": "success",
-    "data": {
-      "id": "INT-105",
-      "deleted": true,
-      "title": "Security Operations Intern"
-    }
-  }
-  ```
-
----
-
-### 8. Filter Metadata
-Retrieves unique domains, modes, and locations from stored records.
-
-- **Method**: `GET`
-- **URL**: `/api/internships/meta/filters`
-- **Response**: `200 OK`
-  ```json
-  {
-    "status": "success",
-    "data": {
-      "domains": [
-        "Cyber Security",
-        "Data Analytics",
-        "Full Stack Development",
-        "UI/UX"
-      ],
-      "modes": [
-        "Hybrid",
-        "On-site",
-        "Remote"
-      ],
-      "locations": [
-        "Bengaluru",
-        "India",
-        "Pune"
-      ],
-      "total": 5
-    }
-  }
-  ```
-
----
-
-## 💻 Frontend Client Integration
-
-The application includes an accessible frontend built with semantic HTML5, CSS Grid, and vanilla JavaScript:
-- When the Express server is running, navigating to `http://localhost:3000/` serves `index.html`.
-- The client script (`app.js`) fetches directly from `/api/internships?limit=100`.
-- If accessed offline without the backend, `app.js` gracefully falls back to the static `internships.json` file.
-
----
-
-## 🛡 Validation & Error Handling
-
-All incoming mutation requests are validated by middleware (`src/middleware/validate.js`):
-- `title`: Required string, 2-120 characters.
-- `domain`: Required string, 2-80 characters.
-- `mode`: Must be one of `Remote`, `Hybrid`, or `On-site` (case-insensitive, normalized).
-- `location`: Required string, 2-80 characters.
-- `skills`: Required array of non-empty strings (at least 1 skill).
-- `openings`: Non-negative integer (`>= 0`).
-- `id`: Optional; if supplied on `POST`, validated for duplicate conflict (`409 Conflict`).
-
-### HTTP Status Codes:
-- `200 OK`: Request succeeded.
-- `201 Created`: Resource successfully created.
-- `400 Bad Request`: Payload validation failed or malformed JSON.
-- `404 Not Found`: Endpoint or resource ID does not exist.
-- `409 Conflict`: Resource with requested ID already exists.
-- `500 Internal Server Error`: Centralized server-side error handling.
-
----
-
 ## 📜 License
 
-MIT License. Free to use and modify.
+MIT License. Free to use and adapt.

@@ -4,6 +4,8 @@ const cors = require('cors');
 
 const healthRoutes = require('./routes/health');
 const internshipsRoutes = require('./routes/internships');
+const applicationsRoutes = require('./routes/applications');
+const { securityHeaders, apiLimiter, safeLogger } = require('./middleware/security');
 const { notFoundHandler, globalErrorHandler } = require('./middleware/errorHandler');
 
 /**
@@ -12,34 +14,35 @@ const { notFoundHandler, globalErrorHandler } = require('./middleware/errorHandl
 function createApp() {
   const app = express();
 
-  // Basic security and parsing middleware
+  // 1. Security Headers (Helmet, CSP, no-sniff, frame deny)
+  app.use(securityHeaders);
+
+  // 2. Cross-Origin Resource Sharing
   app.use(cors());
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
 
-  // Request logger in non-test environments
-  if (process.env.NODE_ENV !== 'test') {
-    app.use((req, res, next) => {
-      const start = Date.now();
-      res.on('finish', () => {
-        const duration = Date.now() - start;
-        console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`);
-      });
-      next();
-    });
-  }
+  // 3. Request body parsing with strict size limits (anti-DoS)
+  app.use(express.json({ limit: '100kb' }));
+  app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
-  // Serve static frontend files from workspace root
-  app.use(express.static(path.join(__dirname, '..')));
+  // 4. Safe Logging (never logs PII/passwords/tokens)
+  app.use(safeLogger);
 
-  // API Routes
+  // 5. Serve responsive frontend static files from public/ directory
+  app.use(express.static(path.join(__dirname, '../public')));
+  app.use(express.static(path.join(__dirname, '..'))); // fallback
+
+  // 6. Rate Limiting on API routes
+  app.use('/api', apiLimiter);
+
+  // 7. Core REST API Routes
   app.use('/api/health', healthRoutes);
   app.use('/api/internships', internshipsRoutes);
+  app.use('/api/applications', applicationsRoutes);
 
-  // Catch-all 404 handler for unmatched routes
+  // 8. 404 handler for unmatched routes
   app.use(notFoundHandler);
 
-  // Global centralized error handler
+  // 9. Centralized Error Handler (standardized error envelope)
   app.use(globalErrorHandler);
 
   return app;

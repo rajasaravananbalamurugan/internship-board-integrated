@@ -1,18 +1,18 @@
 /**
- * Internship Board — app.js
- * Vanilla JS, no frameworks.
- * Responsibilities:
- *  - Load internships.json via fetch()
- *  - Render cards, handle UI states (loading / error / empty)
- *  - Live search + dropdown filters
- *  - Accessible <dialog> modal for full details
- *  - Full keyboard navigation (Tab, Enter, Escape)
+ * Internship Board — public/app.js
+ * Vanilla JS, accessible, mobile-first frontend.
+ * Features:
+ *  - Loads /api/internships with loading, error (retry), empty states
+ *  - Live search (180ms debounce) + Domain and Mode dropdown filters
+ *  - Accessible Detail Modal (<dialog>) with keyboard trap
+ *  - Accessible Application Submission Modal (<dialog>) with HTML5 + JS validation,
+ *    loading spinner, inline error handling, and duplicate application feedback
  */
 
 (function () {
   'use strict';
 
-  /* ── DOM refs ──────────────────────────────────────────── */
+  /* ── DOM Elements ────────────────────────────────────────── */
   const grid        = document.getElementById('internship-grid');
   const searchInput = document.getElementById('search-input');
   const domainSel   = document.getElementById('domain-filter');
@@ -27,22 +27,44 @@
   const stateEmpty   = document.getElementById('state-empty');
   const errorMsg     = document.getElementById('error-message');
 
-  const modal           = document.getElementById('detail-modal');
-  const modalClose      = document.getElementById('modal-close');
-  const modalCloseBot   = document.getElementById('modal-close-bottom');
-  const modalId         = document.getElementById('modal-id');
-  const modalTitle      = document.getElementById('modal-title');
-  const modalDomain     = document.getElementById('modal-domain');
-  const modalMode       = document.getElementById('modal-mode');
-  const modalLocation   = document.getElementById('modal-location');
-  const modalOpenings   = document.getElementById('modal-openings');
-  const modalSkills     = document.getElementById('modal-skills');
+  // Detail Modal Elements
+  const detailModal        = document.getElementById('detail-modal');
+  const modalClose         = document.getElementById('modal-close');
+  const modalCloseBot      = document.getElementById('modal-close-bottom');
+  const modalId            = document.getElementById('modal-id');
+  const modalTitle         = document.getElementById('modal-title');
+  const modalDomain        = document.getElementById('modal-domain');
+  const modalMode          = document.getElementById('modal-mode');
+  const modalLocation      = document.getElementById('modal-location');
+  const modalOpenings      = document.getElementById('modal-openings');
+  const modalSkills        = document.getElementById('modal-skills');
+  const modalApplyTrigger  = document.getElementById('modal-apply-trigger');
 
-  /* ── State ─────────────────────────────────────────────── */
+  // Application Modal Elements
+  const applyModal         = document.getElementById('apply-modal');
+  const applyCloseIcon     = document.getElementById('apply-close-icon');
+  const applyCancelBtn     = document.getElementById('apply-cancel-btn');
+  const applyForm          = document.getElementById('apply-form');
+  const applyRoleId        = document.getElementById('apply-role-id');
+  const applyModalTitle    = document.getElementById('apply-modal-title');
+  const applyInternshipId  = document.getElementById('apply-internship-id');
+  const applicantName      = document.getElementById('applicant-name');
+  const applicantEmail     = document.getElementById('applicant-email');
+  const portfolioUrl       = document.getElementById('portfolio-url');
+  const coverNote          = document.getElementById('cover-note');
+  const applySubmitBtn     = document.getElementById('apply-submit-btn');
+  const applyAlertError    = document.getElementById('apply-alert-error');
+  const applyAlertSuccess  = document.getElementById('apply-alert-success');
+  const nameError          = document.getElementById('name-error');
+  const emailError         = document.getElementById('email-error');
+  const portfolioError     = document.getElementById('portfolio-error');
+
+  /* ── State ──────────────────────────────────────────────── */
   let allInternships = [];
-  let lastFocusedEl  = null;
+  let currentInternship = null;
+  let lastFocusedEl = null;
 
-  /* ── SVG icons (inline, reusable) ─────────────────────── */
+  /* ── SVG Icons ──────────────────────────────────────────── */
   const svgLocation = `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
     <path d="M8 1.5A4.5 4.5 0 0 0 3.5 6c0 3.5 4.5 8.5 4.5 8.5s4.5-5 4.5-8.5A4.5 4.5 0 0 0 8 1.5Z" stroke="currentColor" stroke-width="1.4"/>
     <circle cx="8" cy="6" r="1.5" stroke="currentColor" stroke-width="1.4"/>
@@ -54,7 +76,7 @@
     <line x1="4" y1="9.5" x2="6.5" y2="9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
   </svg>`;
 
-  /* ── Utility: show/hide state panels ───────────────────── */
+  /* ── Utilities ──────────────────────────────────────────── */
   function showState(name) {
     stateLoading.hidden = name !== 'loading';
     stateError.hidden   = name !== 'error';
@@ -63,22 +85,24 @@
   }
 
   function updateCount(count, total) {
-    if (total === 0) { countEl.textContent = ''; return; }
+    if (total === 0) {
+      countEl.textContent = '';
+      return;
+    }
     countEl.textContent = count === total
       ? `${total} internship${total !== 1 ? 's' : ''}`
       : `${count} of ${total} internship${total !== 1 ? 's' : ''} shown`;
   }
 
-  /* ── Escape HTML to prevent XSS ────────────────────────── */
   function esc(str) {
-    return String(str)
+    return String(str || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
 
-  /* ── Build a single card element ───────────────────────── */
+  /* ── Build Card Element ─────────────────────────────────── */
   function buildCard(item) {
     const li = document.createElement('li');
     li.className = 'card';
@@ -87,7 +111,7 @@
 
     const modeClass = `mode--${item.mode.replace(/\s+/g, '-')}`;
 
-    const skillBadges = item.skills
+    const skillBadges = (item.skills || [])
       .map(s => `<span class="skill-badge">${esc(s)}</span>`)
       .join('');
 
@@ -112,59 +136,67 @@
         <span class="card-openings">
           <strong>${esc(String(item.openings))}</strong> opening${item.openings !== 1 ? 's' : ''}
         </span>
-        <button
-          type="button"
-          class="btn btn--view"
-          aria-label="View details for ${esc(item.title)} (${esc(item.id)})"
-          data-id="${esc(item.id)}"
-        >View Details</button>
+        <div style="display: flex; gap: 8px;">
+          <button
+            type="button"
+            class="btn btn--ghost card-btn card-view-btn"
+            aria-label="View details for ${esc(item.title)} (${esc(item.id)})"
+            data-id="${esc(item.id)}"
+          >
+            Details
+          </button>
+          <button
+            type="button"
+            class="btn btn--primary card-btn card-apply-btn"
+            aria-label="Apply for ${esc(item.title)} (${esc(item.id)})"
+            data-id="${esc(item.id)}"
+          >
+            Apply
+          </button>
+        </div>
       </div>
     `;
 
     return li;
   }
 
-  /* ── Render filtered list ───────────────────────────────── */
-  function renderCards(items) {
+  /* ── Render Cards ───────────────────────────────────────── */
+  function renderCards(list) {
     grid.innerHTML = '';
-
-    if (items.length === 0) {
+    if (list.length === 0) {
       showState('empty');
       updateCount(0, allInternships.length);
       return;
     }
 
-    showState(null);
+    showState('grid');
     const fragment = document.createDocumentFragment();
-    items.forEach(item => fragment.appendChild(buildCard(item)));
+    list.forEach(item => fragment.appendChild(buildCard(item)));
     grid.appendChild(fragment);
-    updateCount(items.length, allInternships.length);
+    updateCount(list.length, allInternships.length);
   }
 
-  /* ── Filter logic ───────────────────────────────────────── */
-  function getFiltered() {
+  /* ── Filtering Logic ────────────────────────────────────── */
+  function applyFilters() {
     const q      = searchInput.value.trim().toLowerCase();
     const domain = domainSel.value;
     const mode   = modeSel.value;
 
-    return allInternships.filter(item => {
-      const matchSearch = !q
-        || item.title.toLowerCase().includes(q)
-        || item.location.toLowerCase().includes(q)
-        || item.skills.some(s => s.toLowerCase().includes(q));
+    const filtered = allInternships.filter(item => {
+      if (domain && item.domain !== domain) return false;
+      if (mode && item.mode !== mode) return false;
+      if (!q) return true;
 
-      const matchDomain = !domain || item.domain === domain;
-      const matchMode   = !mode   || item.mode   === mode;
+      const titleMatch    = item.title.toLowerCase().includes(q);
+      const locationMatch = item.location.toLowerCase().includes(q);
+      const skillMatch    = Array.isArray(item.skills) && item.skills.some(s => s.toLowerCase().includes(q));
 
-      return matchSearch && matchDomain && matchMode;
+      return titleMatch || locationMatch || skillMatch;
     });
+
+    renderCards(filtered);
   }
 
-  function applyFilters() {
-    renderCards(getFiltered());
-  }
-
-  /* ── Reset filters ──────────────────────────────────────── */
   function resetFilters() {
     searchInput.value = '';
     domainSel.value   = '';
@@ -173,11 +205,12 @@
     searchInput.focus();
   }
 
-  /* ── Open modal ─────────────────────────────────────────── */
-  function openModal(id) {
+  /* ── Detail Modal ───────────────────────────────────────── */
+  function openDetailModal(id) {
     const item = allInternships.find(i => i.id === id);
     if (!item) return;
 
+    currentInternship = item;
     lastFocusedEl = document.activeElement;
 
     modalId.textContent       = item.id;
@@ -187,33 +220,231 @@
     modalLocation.textContent = item.location;
     modalOpenings.textContent = `${item.openings} open position${item.openings !== 1 ? 's' : ''}`;
 
-    // Build skill badges
-    modalSkills.innerHTML = item.skills
+    modalSkills.innerHTML = (item.skills || [])
       .map(s => `<span class="skill-badge">${esc(s)}</span>`)
       .join('');
 
-    modal.showModal();
+    detailModal.showModal();
     modalClose.focus();
   }
 
-  /* ── Close modal ─────────────────────────────────────────── */
-  function closeModal() {
-    modal.close();
-    if (lastFocusedEl) {
-      lastFocusedEl.focus();
-      lastFocusedEl = null;
+  function closeDetailModal() {
+    if (detailModal.open) {
+      detailModal.close();
+      if (lastFocusedEl) {
+        lastFocusedEl.focus();
+      }
     }
   }
 
-  /* ── Focus trap inside modal ────────────────────────────── */
-  function trapFocus(e) {
+  /* ── Application Modal ──────────────────────────────────── */
+  function openApplyModal(id) {
+    const item = allInternships.find(i => i.id === id);
+    if (!item) return;
+
+    currentInternship = item;
+    lastFocusedEl = document.activeElement;
+
+    if (detailModal.open) {
+      detailModal.close();
+    }
+
+    // Set header info
+    applyRoleId.textContent = item.id;
+    applyModalTitle.textContent = `Apply for ${item.title}`;
+    applyInternshipId.value = item.id;
+
+    // Reset form states
+    resetApplyForm();
+
+    applyModal.showModal();
+    applicantName.focus();
+  }
+
+  function closeApplyModal() {
+    if (applyModal.open) {
+      applyModal.close();
+      if (lastFocusedEl) {
+        lastFocusedEl.focus();
+      }
+    }
+  }
+
+  function resetApplyForm() {
+    applyForm.reset();
+    applyAlertError.hidden = true;
+    applyAlertError.textContent = '';
+    applyAlertSuccess.hidden = true;
+    applyAlertSuccess.textContent = '';
+    clearFieldErrors();
+    setSubmitting(false);
+  }
+
+  function clearFieldErrors() {
+    nameError.textContent = '';
+    emailError.textContent = '';
+    portfolioError.textContent = '';
+    applicantName.classList.remove('has-error');
+    applicantEmail.classList.remove('has-error');
+    portfolioUrl.classList.remove('has-error');
+  }
+
+  function setSubmitting(isSubmitting) {
+    applySubmitBtn.disabled = isSubmitting;
+    const btnText = applySubmitBtn.querySelector('.btn-text');
+    const btnSpinner = applySubmitBtn.querySelector('.btn-spinner');
+
+    if (btnText) btnText.textContent = isSubmitting ? 'Submitting Application…' : 'Submit Application';
+    if (btnSpinner) btnSpinner.hidden = !isSubmitting;
+  }
+
+  /* ── Client Validation for Application Form ─────────────── */
+  function validateClientForm() {
+    clearFieldErrors();
+    let isValid = true;
+    let firstInvalid = null;
+
+    // 1. Name validation
+    const nameVal = applicantName.value.trim();
+    if (!nameVal) {
+      nameError.textContent = 'Please enter your full name.';
+      applicantName.classList.add('has-error');
+      isValid = false;
+      if (!firstInvalid) firstInvalid = applicantName;
+    } else if (nameVal.length < 2) {
+      nameError.textContent = 'Name must be at least 2 characters.';
+      applicantName.classList.add('has-error');
+      isValid = false;
+      if (!firstInvalid) firstInvalid = applicantName;
+    }
+
+    // 2. Email validation
+    const emailVal = applicantEmail.value.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailVal) {
+      emailError.textContent = 'Please enter your email address.';
+      applicantEmail.classList.add('has-error');
+      isValid = false;
+      if (!firstInvalid) firstInvalid = applicantEmail;
+    } else if (!emailRegex.test(emailVal)) {
+      emailError.textContent = 'Please enter a valid email address (e.g. name@example.com).';
+      applicantEmail.classList.add('has-error');
+      isValid = false;
+      if (!firstInvalid) firstInvalid = applicantEmail;
+    }
+
+    // 3. Portfolio URL validation
+    const urlVal = portfolioUrl.value.trim();
+    if (!urlVal) {
+      portfolioError.textContent = 'Please enter your portfolio or GitHub URL.';
+      portfolioUrl.classList.add('has-error');
+      isValid = false;
+      if (!firstInvalid) firstInvalid = portfolioUrl;
+    } else {
+      try {
+        const parsed = new URL(urlVal);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          portfolioError.textContent = 'URL must start with http:// or https://';
+          portfolioUrl.classList.add('has-error');
+          isValid = false;
+          if (!firstInvalid) firstInvalid = portfolioUrl;
+        }
+      } catch (e) {
+        portfolioError.textContent = 'Please enter a valid URL (e.g. https://github.com/yourname).';
+        portfolioUrl.classList.add('has-error');
+        isValid = false;
+        if (!firstInvalid) firstInvalid = portfolioUrl;
+      }
+    }
+
+    if (firstInvalid) {
+      firstInvalid.focus();
+    }
+
+    return isValid;
+  }
+
+  /* ── Submit Application Handler ─────────────────────────── */
+  async function handleApplicationSubmit(e) {
+    e.preventDefault();
+    applyAlertError.hidden = true;
+    applyAlertSuccess.hidden = true;
+
+    if (!validateClientForm()) {
+      return;
+    }
+
+    const payload = {
+      internship_id: applyInternshipId.value,
+      applicant_name: applicantName.value.trim(),
+      applicant_email: applicantEmail.value.trim(),
+      portfolio_url: portfolioUrl.value.trim(),
+      cover_note: coverNote.value.trim()
+    };
+
+    setSubmitting(true);
+
+    try {
+      const res = await fetch('/api/applications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (res.status === 201 && data.status === 'success') {
+        // Success State
+        applyAlertSuccess.hidden = false;
+        applyAlertSuccess.innerHTML = `
+          <strong>🎉 Application submitted successfully!</strong><br />
+          Application reference: <code>${esc(data.data.id)}</code>.<br />
+          Thank you for applying, ${esc(data.data.applicant_name)}.
+        `;
+        applyForm.reset();
+        clearFieldErrors();
+        applySubmitBtn.disabled = true;
+        const btnText = applySubmitBtn.querySelector('.btn-text');
+        if (btnText) btnText.textContent = 'Submitted!';
+      } else if (res.status === 409) {
+        // Duplicate Application
+        applyAlertError.hidden = false;
+        applyAlertError.textContent = data.message || 'You have already applied for this internship with this email address.';
+        applicantEmail.focus();
+      } else if (res.status === 400 && data.errors && Array.isArray(data.errors)) {
+        // Validation Errors from Server
+        applyAlertError.hidden = false;
+        const errList = data.errors.map(err => `• ${esc(err.message)}`).join('<br/>');
+        applyAlertError.innerHTML = `<strong>Submission errors:</strong><br/>${errList}`;
+      } else {
+        // General Error
+        applyAlertError.hidden = false;
+        applyAlertError.textContent = data.message || 'Failed to submit application. Please check your information.';
+      }
+    } catch (err) {
+      applyAlertError.hidden = false;
+      applyAlertError.textContent = `Network error: Could not reach the server. Please try again. (${err.message})`;
+    } finally {
+      const btnText = applySubmitBtn.querySelector('.btn-text');
+      if (btnText && btnText.textContent !== 'Submitted!') {
+        setSubmitting(false);
+      }
+    }
+  }
+
+  /* ── Modal Focus Trap ───────────────────────────────────── */
+  function trapFocus(modal, e) {
     if (!modal.open) return;
 
     const focusable = Array.from(
       modal.querySelectorAll(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       )
-    ).filter(el => !el.disabled);
+    ).filter(el => !el.disabled && el.offsetParent !== null);
+
+    if (focusable.length === 0) return;
 
     const first = focusable[0];
     const last  = focusable[focusable.length - 1];
@@ -231,40 +462,22 @@
     }
   }
 
-  /* ── Fetch data ─────────────────────────────────────────── */
+  /* ── Fetch Data from Backend API ────────────────────────── */
   async function loadInternships() {
     showState('loading');
     grid.innerHTML = '';
     countEl.textContent = '';
 
     try {
-      let items = null;
+      const res = await fetch('/api/internships?limit=100');
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const body = await res.json();
 
-      // Try fetching from the backend REST API first
-      try {
-        const apiRes = await fetch('/api/internships?limit=100');
-        if (apiRes.ok) {
-          const apiJson = await apiRes.json();
-          if (apiJson && apiJson.status === 'success' && Array.isArray(apiJson.data)) {
-            items = apiJson.data;
-          }
-        }
-      } catch (apiErr) {
-        // Fallback to static JSON if backend API is not running
+      if (!body || body.status !== 'success' || !Array.isArray(body.data)) {
+        throw new Error('Invalid response structure received from API.');
       }
 
-      // If backend API did not provide data, fallback to internships.json
-      if (!items) {
-        const res = await fetch('./internships.json');
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        const data = await res.json();
-        if (!data.internships || !Array.isArray(data.internships)) {
-          throw new Error('Unexpected data format.');
-        }
-        items = data.internships;
-      }
-
-      allInternships = items;
+      allInternships = body.data;
       renderCards(allInternships);
     } catch (err) {
       showState('error');
@@ -273,64 +486,75 @@
     }
   }
 
-  /* ── Event listeners ────────────────────────────────────── */
+  /* ── Event Listeners ────────────────────────────────────── */
 
-  // Search: debounce 180ms for performance
-  let debounceTimer;
+  // Search input debounce (180ms)
+  let searchTimer = null;
   searchInput.addEventListener('input', () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(applyFilters, 180);
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applyFilters, 180);
   });
 
+  // Filter dropdowns
   domainSel.addEventListener('change', applyFilters);
   modeSel.addEventListener('change', applyFilters);
+
+  // Reset buttons
   resetBtn.addEventListener('click', resetFilters);
   emptyReset.addEventListener('click', resetFilters);
+
+  // Retry button in error state
   retryBtn.addEventListener('click', loadInternships);
 
-  // Card "View Details" delegation
-  grid.addEventListener('click', e => {
-    const btn = e.target.closest('[data-id]');
-    if (btn) openModal(btn.dataset.id);
-  });
+  // Grid Delegation for Card buttons
+  grid.addEventListener('click', (e) => {
+    const viewBtn = e.target.closest('.card-view-btn');
+    if (viewBtn) {
+      const id = viewBtn.getAttribute('data-id');
+      openDetailModal(id);
+      return;
+    }
 
-  // Keyboard activation for view-details buttons
-  grid.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      const btn = e.target.closest('[data-id]');
-      if (btn) {
-        e.preventDefault();
-        openModal(btn.dataset.id);
-      }
+    const applyBtn = e.target.closest('.card-apply-btn');
+    if (applyBtn) {
+      const id = applyBtn.getAttribute('data-id');
+      openApplyModal(id);
+      return;
     }
   });
 
-  // Close modal buttons
-  modalClose.addEventListener('click', closeModal);
-  modalCloseBot.addEventListener('click', closeModal);
-
-  // Close on backdrop click (native dialog)
-  modal.addEventListener('click', e => {
-    if (e.target === modal) closeModal();
+  // Detail Modal Events
+  modalClose.addEventListener('click', closeDetailModal);
+  modalCloseBot.addEventListener('click', closeDetailModal);
+  detailModal.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDetailModal();
+    if (e.key === 'Tab') trapFocus(detailModal, e);
+  });
+  detailModal.addEventListener('click', (e) => {
+    if (e.target === detailModal) closeDetailModal();
   });
 
-  // Escape key (dialog native + extra safety)
-  modal.addEventListener('cancel', e => {
-    e.preventDefault(); // prevent default to control focus restore
-    closeModal();
+  modalApplyTrigger.addEventListener('click', () => {
+    if (currentInternship) {
+      openApplyModal(currentInternship.id);
+    }
   });
 
-  // Focus trap
-  modal.addEventListener('keydown', e => {
-    if (e.key === 'Tab') trapFocus(e);
+  // Application Modal Events
+  applyCloseIcon.addEventListener('click', closeApplyModal);
+  applyCancelBtn.addEventListener('click', closeApplyModal);
+  applyModal.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeApplyModal();
+    if (e.key === 'Tab') trapFocus(applyModal, e);
+  });
+  applyModal.addEventListener('click', (e) => {
+    if (e.target === applyModal) closeApplyModal();
   });
 
-  // Apply button (placeholder)
-  modal.querySelector('.modal-apply-btn').addEventListener('click', () => {
-    alert(`Application for "${modalTitle.textContent}" noted! (Demo only — connect your backend here.)`);
-  });
+  // Form Submit Event
+  applyForm.addEventListener('submit', handleApplicationSubmit);
 
-  /* ── Init ───────────────────────────────────────────────── */
+  /* ── Boot ───────────────────────────────────────────────── */
   loadInternships();
 
 })();

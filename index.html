@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Internship Board</title>
+  <title>InternHub — Internship Board</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,6 +25,7 @@
 
   <main id="main-content">
 
+    <!-- Search & Filters -->
     <section class="controls-section" aria-label="Search and filter internships">
       <div class="controls-inner">
         <div class="search-wrap">
@@ -74,12 +75,15 @@
       <div class="results-meta" aria-live="polite" aria-atomic="true" id="results-count"></div>
     </section>
 
+    <!-- Listings & States -->
     <section class="board-section" aria-label="Internship listings">
+      <!-- Loading State -->
       <div id="state-loading" class="state-panel" role="status" aria-live="polite" hidden>
         <div class="spinner" aria-hidden="true"></div>
         <p>Loading internships…</p>
       </div>
 
+      <!-- Error State with Retry Button -->
       <div id="state-error" class="state-panel state-panel--error" role="alert" hidden>
         <svg class="state-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/>
@@ -90,6 +94,7 @@
         <button type="button" id="retry-btn" class="btn btn--primary">Retry</button>
       </div>
 
+      <!-- Empty State with Reset Filters Button -->
       <div id="state-empty" class="state-panel" role="status" aria-live="polite" hidden>
         <svg class="state-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
@@ -100,13 +105,14 @@
         <button type="button" id="empty-reset-btn" class="btn btn--primary">Reset filters</button>
       </div>
 
-      <ul id="internship-grid" class="internship-grid" aria-label="Internship cards" role="list"></ul>
+      <!-- Grid of Internship Cards -->
+      <ul id="internship-grid" class="cards-grid" aria-label="Internship cards"></ul>
     </section>
 
   </main>
 
   <footer class="site-footer" role="contentinfo">
-    <p>© 2026 InternHub · All positions are equal opportunity</p>
+    <p>InternHub &copy; 2026. Built with Vanilla JS &amp; Express SQLite Backend.</p>
   </footer>
 
   <!-- Detail Modal -->
@@ -147,9 +153,118 @@
       </dl>
 
       <footer class="modal-footer">
-        <button type="button" class="btn btn--primary modal-apply-btn">Apply Now</button>
+        <button type="button" class="btn btn--primary modal-apply-btn" id="modal-apply-trigger">Apply Now</button>
         <button type="button" class="btn btn--ghost" id="modal-close-bottom">Close</button>
       </footer>
+    </div>
+  </dialog>
+
+  <!-- Application Submission Modal (<dialog>) -->
+  <dialog id="apply-modal" class="modal" aria-labelledby="apply-modal-title" aria-modal="true">
+    <div class="modal-inner modal-inner--form">
+      <header class="modal-header">
+        <div>
+          <span class="modal-id" id="apply-role-id">INT-101</span>
+          <h2 class="modal-title" id="apply-modal-title">Apply for Internship</h2>
+        </div>
+        <button type="button" class="modal-close" id="apply-close-icon" aria-label="Close application form">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <line x1="4" y1="4" x2="16" y2="16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <line x1="16" y1="4" x2="4" y2="16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </header>
+
+      <!-- Application Form -->
+      <form id="apply-form" class="application-form" novalidate>
+        <input type="hidden" id="apply-internship-id" name="internship_id" />
+
+        <div class="form-alerts" aria-live="assertive">
+          <div id="apply-alert-error" class="form-alert form-alert--error" role="alert" hidden></div>
+          <div id="apply-alert-success" class="form-alert form-alert--success" role="status" hidden></div>
+        </div>
+
+        <div class="form-fields" id="apply-fields">
+          <!-- 1. Full Name -->
+          <div class="form-group">
+            <label for="applicant-name" class="form-label">
+              Full Name <span class="required" aria-hidden="true">*</span>
+            </label>
+            <input
+              type="text"
+              id="applicant-name"
+              name="applicant_name"
+              class="form-control"
+              required
+              minlength="2"
+              maxlength="100"
+              autocomplete="name"
+              placeholder="e.g. Jane Doe"
+              aria-describedby="name-error"
+            />
+            <span class="field-error" id="name-error" aria-live="polite"></span>
+          </div>
+
+          <!-- 2. Email Address -->
+          <div class="form-group">
+            <label for="applicant-email" class="form-label">
+              Email Address <span class="required" aria-hidden="true">*</span>
+            </label>
+            <input
+              type="email"
+              id="applicant-email"
+              name="applicant_email"
+              class="form-control"
+              required
+              maxlength="254"
+              autocomplete="email"
+              placeholder="e.g. jane@example.com"
+              aria-describedby="email-error"
+            />
+            <span class="field-error" id="email-error" aria-live="polite"></span>
+          </div>
+
+          <!-- 3. Portfolio / GitHub URL -->
+          <div class="form-group">
+            <label for="portfolio-url" class="form-label">
+              Portfolio or GitHub URL <span class="required" aria-hidden="true">*</span>
+            </label>
+            <input
+              type="url"
+              id="portfolio-url"
+              name="portfolio_url"
+              class="form-control"
+              required
+              placeholder="https://github.com/username or https://myportfolio.dev"
+              aria-describedby="portfolio-error"
+            />
+            <span class="field-error" id="portfolio-error" aria-live="polite"></span>
+          </div>
+
+          <!-- 4. Cover Note -->
+          <div class="form-group">
+            <label for="cover-note" class="form-label">
+              Short Cover Note <span class="optional">(optional, max 1000 characters)</span>
+            </label>
+            <textarea
+              id="cover-note"
+              name="cover_note"
+              class="form-control form-control--textarea"
+              rows="3"
+              maxlength="1000"
+              placeholder="Tell us briefly why you are interested in this position..."
+            ></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" id="apply-submit-btn" class="btn btn--primary">
+              <span class="btn-text">Submit Application</span>
+              <span class="btn-spinner" aria-hidden="true" hidden></span>
+            </button>
+            <button type="button" id="apply-cancel-btn" class="btn btn--ghost">Cancel</button>
+          </div>
+        </div>
+      </form>
     </div>
   </dialog>
 

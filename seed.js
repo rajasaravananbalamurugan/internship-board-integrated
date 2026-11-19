@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { getDatabase } = require('./src/db/database');
+const { getDatabase } = require('./src/db');
 
 const defaultSeedData = [
   {
@@ -97,7 +97,7 @@ function seedDatabase(dbPath) {
   seedTransaction(seedItems);
 
   const count = db.prepare('SELECT COUNT(*) AS total FROM internships').get().total;
-  console.log(`✅ Seed complete! Seeded ${seedItems.length} records. Total records in database: ${count}.`);
+  console.log(`✅ Seed complete! Seeded ${seedItems.length} records. Total internships in database: ${count}.`);
   return { seeded: seedItems.length, total: count };
 }
 
